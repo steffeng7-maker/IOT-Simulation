@@ -1,0 +1,49 @@
+services:
+  hivemq:
+    image: hivemq/hivemq-ce:latest
+    ports:
+      - "127.0.0.1:1883:1883"
+    restart: unless-stopped
+
+  mixer:
+    build: .
+    command: python -m simulator.mixer
+    ports:
+      - "127.0.0.1:4840:4840"
+    restart: unless-stopped
+
+  gateway:
+    build: .
+    command: python -m gateway.opcua_to_mqtt
+    environment:
+      OPCUA_URL: opc.tcp://mixer:4840/mixer/
+      MQTT_HOST: hivemq
+    depends_on:
+      - mixer
+      - hivemq
+    restart: unless-stopped
+
+  analytics:
+    build: .
+    command: python -m consumers.analytics
+    environment:
+      MQTT_HOST: hivemq
+    volumes:
+      - metrics:/data
+    depends_on:
+      - hivemq
+    restart: unless-stopped
+
+  dashboard:
+    build: .
+    command: streamlit run dashboard/app.py --server.address=0.0.0.0
+    ports:
+      - "127.0.0.1:8501:8501"
+    volumes:
+      - metrics:/data:ro
+    depends_on:
+      - analytics
+    restart: unless-stopped
+
+volumes:
+  metrics:
